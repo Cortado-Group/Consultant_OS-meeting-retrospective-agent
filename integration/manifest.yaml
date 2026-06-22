@@ -1,0 +1,28 @@
+manifest_version: "1"
+contract_version: "1"
+
+agent:
+  id: meeting-retrospective-agent
+  display_name: "Meeting Retrospective Agent"
+  version: "1.0.0"
+  description: >
+    Analyzes retrospective meeting transcripts to extract lessons learned and posts them to the Django REST API.
+
+capabilities:
+  - read
+  - write
+
+jobs:
+  - name: retrospective_extraction
+    display_name: "Agent"
+    actions:
+      - start
+      - soft_stop
+      - hard_stop
+      - manual_ping
+      - manual_run
+      - run
+
+entrypoints:
+  service: integration.server:flask_app
+  integration: integration.server:flask_app
