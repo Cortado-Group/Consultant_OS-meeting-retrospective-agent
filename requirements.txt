@@ -1,0 +1,6 @@
+# agent-sdk is a local package — install from the agent-console repo:
+#   pip install -e /opt/agent-console/agent_sdk
+flask
+openai
+python-dotenv
+requests
