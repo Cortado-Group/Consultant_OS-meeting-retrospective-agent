@@ -37,6 +37,7 @@ def _run_retro_pass() -> dict:
     logger.info("retro_pass.meetings_fetched count=%d", len(meetings))
 
     created = skipped = processed = 0
+    created_meetings: list[str] = []
 
     for meeting in meetings:
         if processed >= _MAX_MEETINGS_PER_RUN:
@@ -64,13 +65,15 @@ def _run_retro_pass() -> dict:
             continue
 
         processed += 1
-        logger.info("retro_pass.analyzing guid=%s name=%r", guid, meeting.get("name", guid))
+        meeting_name = meeting.get("name") or guid
+        logger.info("retro_pass.analyzing guid=%s name=%r", guid, meeting_name)
 
         lessons = analyzer.analyze(transcript)
         if not lessons:
             logger.info("retro_pass.no_lessons guid=%s", guid)
             continue
 
+        lessons_before = created
         for lesson in lessons:
             try:
                 client.create_lesson(guid, lesson)
@@ -78,9 +81,12 @@ def _run_retro_pass() -> dict:
             except Exception as exc:
                 logger.error("retro_pass.create_failed guid=%s error=%s", guid, exc)
 
-        logger.info("retro_pass.done guid=%s lessons_created=%d", guid, created)
+        if created > lessons_before:
+            created_meetings.append(meeting_name)
 
-    return {"created": created, "skipped": skipped, "processed": processed}
+        logger.info("retro_pass.done guid=%s lessons_created=%d", guid, created - lessons_before)
+
+    return {"created": created, "skipped": skipped, "processed": processed, "meetings": created_meetings}
 
 
 def start(job_name: str, **kwargs) -> dict:
@@ -144,7 +150,6 @@ def run(job_name: str, **kwargs) -> dict:
          data={"correlation_id": correlation_id} if correlation_id else None)
 
     def _worker():
-        _slack.notify("Run started")
         try:
             result = _run_retro_pass()
             with state.lock:
@@ -154,8 +159,9 @@ def run(job_name: str, **kwargs) -> dict:
             msg = (f"run #{count}: processed {result['processed']} meeting(s), "
                    f"created {result['created']} lesson(s), skipped {result['skipped']}")
             logger.info("control.run.completed %s", msg)
-            _slack.notify(f"Run complete — processed {result['processed']}, "
-                          f"created {result['created']} lesson(s), skipped {result['skipped']}")
+            if result["created"] > 0:
+                meetings_list = "\n".join(f"• {m}" for m in result.get("meetings", []))
+                _slack.notify(f"extracted lessons from {result['created']} meeting(s):\n{meetings_list}")
             emit(EventType.COMPLETED, job_name, detail=msg,
                  data={"correlation_id": correlation_id} if correlation_id else None)
         except Exception as err:
@@ -183,7 +189,6 @@ def manual_run(job_name: str, **kwargs) -> dict:
 
     emit(EventType.STARTED, job_name, detail="manual_run: starting retro extraction pass",
          data={"correlation_id": correlation_id} if correlation_id else None)
-    _slack.notify("Manual run started")
     try:
         result = _run_retro_pass()
         with state.lock:
@@ -192,8 +197,9 @@ def manual_run(job_name: str, **kwargs) -> dict:
             count = state.run_count
         msg = (f"manual_run #{count}: processed {result['processed']} meeting(s), "
                f"created {result['created']} lesson(s), skipped {result['skipped']}")
-        _slack.notify(f"Manual run complete — processed {result['processed']}, "
-                      f"created {result['created']} lesson(s), skipped {result['skipped']}")
+        if result["created"] > 0:
+            meetings_list = "\n".join(f"• {m}" for m in result.get("meetings", []))
+            _slack.notify(f"extracted lessons from {result['created']} meeting(s):\n{meetings_list}")
         emit(EventType.COMPLETED, job_name, detail=msg,
              data={"correlation_id": correlation_id} if correlation_id else None)
         return {"job_name": job_name, "action": "manual_run", "ok": True,
