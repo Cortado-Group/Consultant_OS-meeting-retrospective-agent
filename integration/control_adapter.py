@@ -166,7 +166,6 @@ def run(job_name: str, **kwargs) -> dict:
                  data={"correlation_id": correlation_id} if correlation_id else None)
         except Exception as err:
             logger.error("control.run.failed error=%s", err, exc_info=True)
-            _slack.notify(f"Run FAILED: {err}")
             emit(EventType.FAILED, job_name, detail=f"run failed: {err}",
                  data={"correlation_id": correlation_id} if correlation_id else None)
 
@@ -206,7 +205,6 @@ def manual_run(job_name: str, **kwargs) -> dict:
                 "paused": True, "message": msg, **result}
     except Exception as err:
         logger.error("control.manual_run.failed error=%s", err, exc_info=True)
-        _slack.notify(f"Manual run FAILED: {err}")
         emit(EventType.FAILED, job_name, detail=f"manual_run failed: {err}",
              data={"correlation_id": correlation_id} if correlation_id else None)
         return {"job_name": job_name, "action": "manual_run", "ok": False,
